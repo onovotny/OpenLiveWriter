@@ -1,30 +1,45 @@
 @ECHO OFF
 
-SETLOCAL
+setlocal enableextensions enabledelayedexpansion
 
 SET CACHED_NUGET=%LocalAppData%\NuGet\NuGet.exe
 SET SOLUTION_PATH="%~dp0src\managed\writer.sln"
-SET MSBUILD14_TOOLS_PATH="%ProgramFiles(x86)%\MSBuild\14.0\bin\MSBuild.exe"
-SET MSBUILD12_TOOLS_PATH="%ProgramFiles(x86)%\MSBuild\12.0\bin\MSBuild.exe"
-SET BUILD_TOOLS_PATH=%MSBUILD14_TOOLS_PATH%
 
-IF NOT EXIST %MSBUILD14_TOOLS_PATH% (
-  echo In order to run this tool you need either Visual Studio 2015 or
-  echo Microsoft Build Tools 2015 tools installed.
-  echo.
-  echo Visit this page to download either:
-  echo.
-  echo http://www.visualstudio.com/en-us/downloads/visual-studio-2015-downloads-vs
-  echo.
-  echo Attempting to fall back to MSBuild 12 for building only
-  echo.
-  IF NOT EXIST %MSBUILD12_TOOLS_PATH% (
-    echo Could not find MSBuild 12.  Please install build tools ^(See above^)
-    exit /b 1
-  ) else (
-    set BUILD_TOOLS_PATH=%MSBUILD12_TOOLS_PATH%
-  )
+
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+	FOR /F "delims=" %%E in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\installer\vswhere.exe" -latest -property installationPath') DO (
+		set "MSBUILD_EXE=%%E\MSBuild\15.0\Bin\MSBuild.exe"
+		if exist "!MSBUILD_EXE!" goto :nuget
+	)
 )
+
+FOR %%E in (Enterprise, Professional, Community) DO (
+	set "MSBUILD_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\%%E\MSBuild\15.0\Bin\MSBuild.exe"
+	if exist "!MSBUILD_EXE!" goto :nuget
+)
+
+REM Couldn't be located in the standard locations, expand search
+FOR /F "delims=" %%E IN ('dir /b /ad "%ProgramFiles(x86)%\Microsoft Visual Studio\"') DO (
+	set "MSBUILD_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\%%E\MSBuild\15.0\Bin\MSBuild.exe"
+	if exist "!MSBUILD_EXE!" goto :nuget
+
+	FOR /F "delims=" %%F IN ('dir /b /ad "%ProgramFiles(x86)%\Microsoft Visual Studio\%%E"') DO (
+		set "MSBUILD_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\%%E\%%F\MSBuild\15.0\Bin\MSBuild.exe"
+		if exist "!MSBUILD_EXE!" goto :nuget
+	)
+)
+
+
+echo In order to run this tool you need either Visual Studio 2017 or
+echo Microsoft Build Tools 2017 tools installed.
+echo.
+echo Visit this page to download either:
+echo.
+echo http://www.visualstudio.com/
+echo.
+exit /b 1
+
+:nuget
 
 IF EXIST %CACHED_NUGET% goto restore
 echo Downloading latest version of NuGet.exe...
@@ -44,4 +59,4 @@ IF "%OLW_CONFIG%" == "" (
 
 powershell.exe get-date 
 
-%BUILD_TOOLS_PATH% %SOLUTION_PATH% /nologo /maxcpucount /verbosity:minimal /p:Configuration=%OLW_CONFIG% %*
+"%MSBUILD_EXE%" "%SOLUTION_PATH%" /nologo /maxcpucount /verbosity:minimal /p:Configuration=%OLW_CONFIG% %*
